@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#07060f" />
+<title>RunMan</title>
+<style>
+  :root {
+    --bg: #07060f;
+    --ink: #e8f6ff;
+    --cyan: #3ef0ff;
+    --pink: #ff4fd8;
+    --amber: #ffc857;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    overflow: hidden; touch-action: none;
+  }
+  #stage {
+    position: fixed;
+    left: 50%; top: 50%;
+    width: 400px; height: 720px;
+    transform-origin: center center;
+    background:
+      radial-gradient(120% 70% at 50% 0%, #1a1440 0%, transparent 55%),
+      linear-gradient(180deg, #0c0a18, #07060f 40%, #0a0814);
+    border-radius: 18px;
+    box-shadow: 0 0 0 1px rgba(62,240,255,.18), 0 20px 80px rgba(0,0,0,.55);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  canvas#view { display: block; width: 400px; height: 620px; flex: 0 0 620px; touch-action: none; }
+  #hud {
+    height: 52px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; font-size: 13px; letter-spacing: .08em;
+    color: #b7fff6; text-transform: uppercase;
+  }
+  #hud b { color: #fff; font-weight: 700; }
+  #pad {
+    height: 48px; display: none;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px; padding: 0 12px 8px;
+  }
+  #pad.show { display: grid; }
+  body.touch #pad { display: grid; }
+  #pad button {
+    border: 1px solid rgba(62,240,255,.35);
+    background: rgba(62,240,255,.08);
+    color: var(--cyan); font-size: 22px; border-radius: 12px;
+    touch-action: none; user-select: none;
+  }
+  #pad button:active, #pad button.on { background: rgba(62,240,255,.28); }
+  #pad .up, #pad .left, #pad .down, #pad .right { grid-column: auto; grid-row: auto; }
+  .overlay {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column;
+    background: rgba(6,5,14,.92);
+    padding: 22px 18px 16px;
+    z-index: 5;
+  }
+  .overlay.show { display: flex; }
+  h1 {
+    margin: 8px 0 2px; text-align: center; font-size: 54px; letter-spacing: .12em;
+    color: var(--cyan); text-shadow: 0 0 18px rgba(62,240,255,.7);
+  }
+  .tag { text-align: center; color: var(--pink); letter-spacing: .28em; font-size: 12px; margin-bottom: 10px; }
+  .menu { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; overflow: auto; }
+  button.btn, .menu button {
+    appearance: none; border: 1px solid rgba(255,255,255,.16);
+    background: linear-gradient(180deg, rgba(62,240,255,.14), rgba(62,240,255,.04));
+    color: #fff; border-radius: 12px; padding: 12px 10px;
+    font-size: 15px; letter-spacing: .12em; font-weight: 700;
+  }
+  button.btn.alt { border-color: rgba(255,79,216,.4); background: linear-gradient(180deg, rgba(255,79,216,.16), rgba(255,79,216,.04)); }
+  button.btn:active { transform: translateY(1px); }
+  .scroll {
+    overflow: auto; flex: 1; padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  }
+  .grid button {
+    padding: 10px 0; font-size: 13px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.12); background: #14122a; color: #dff;
+  }
+  .grid button.locked { opacity: .35; }
+  .grid button.cleared { border-color: rgba(62,240,255,.5); color: var(--cyan); }
+  .help { font-size: 14px; line-height: 1.45; color: #d5e7ff; }
+  .help b { color: var(--amber); }
+  .toast {
+    position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+    font-size: 28px; letter-spacing: .14em; color: var(--amber);
+    text-shadow: 0 0 16px rgba(255,200,80,.8);
+    pointer-events: none; opacity: 0; z-index: 6; font-weight: 800;
+  }
+  .small { font-size: 12px; letter-spacing: .06em; color: #9ab; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="hud"><span>SCORE <b id="score">0</b></span><span id="streak"></span><span>LV <b id="lv">1</b></span><span id="lives">●●●</span></div>
+  <canvas id="view" width="400" height="620"></canvas>
+  <div id="pad">
+    <button class="up" data-dir="up" aria-label="Up">▲</button>
+    <button class="left" data-dir="left" aria-label="Left">◀</button>
+    <button class="down" data-dir="down" aria-label="Down">▼</button>
+    <button class="right" data-dir="right" aria-label="Right">▶</button>
+  </div>
+
+  <div class="overlay show" id="menu">
+    <div class="tag">NEON MAZE RUN</div>
+    <h1>RUNMAN</h1>
+    <canvas id="hero" width="400" height="92" style="width:100%;height:92px"></canvas>
+    <div class="menu">
+      <button class="btn" id="btn-start">START GAME</button>
+      <button class="btn" id="btn-levels">SELECT LEVEL</button>
+      <button class="btn alt" id="btn-daily">DAILY CHALLENGE</button>
+      <div class="small" id="daily-note"></div>
+      <button class="btn" id="btn-endless">ENDLESS MODE</button>
+      <button class="btn" id="btn-help">HOW TO PLAY</button>
+      <button class="btn" id="btn-sound">SOUND: ON</button>
+      <button class="btn" id="btn-exit">EXIT</button>
+    </div>
+    <div class="small" id="best">BEST 0</div>
+  </div>
+
+  <div class="overlay" id="levels">
+    <div class="tag">PICK A FLOOR</div>
+    <h1 style="font-size:32px">LEVELS</h1>
+    <div class="scroll"><div class="grid" id="level-grid"></div></div>
+    <button class="btn" id="btn-back-levels" style="margin-top:10px">BACK</button>
+  </div>
+
+  <div class="overlay" id="help">
+    <div class="tag">FIELD MANUAL</div>
+    <h1 style="font-size:28px">HOW TO PLAY</h1>
+    <div class="scroll help">
+      <p>Clear every spark to open the gate. <b>Arrow keys</b> or the on-screen pad steer RunMan. He keeps running until a wall — queue the next turn early.</p>
+      <p>Four pursuers hunt the floor. Their styles differ: Blitz charges, Drift wanders, Cut corners, and Tail follows your trail.</p>
+      <p><b>Orbs:</b> Volt (purple) panics them so you can tag them. Bolt makes you faster. Magnet pulls nearby sparks. Frost freezes the pack.</p>
+      <p>Tagging a panicked pursuer starts a combo. You have three lives. 200 campaign floors, a date-seeded daily, and an endless climb.</p>
+    </div>
+    <button class="btn" id="btn-back-help" style="margin-top:10px">BACK</button>
+  </div>
+
+  <div class="overlay" id="over">
+    <div class="tag" id="over-tag">RUN OVER</div>
+    <h1 id="over-title" style="font-size:36px">CAUGHT</h1>
+    <div class="small" id="over-sub">SCORE 0</div>
+    <div class="menu" style="margin-top:18px">
+      <button class="btn" id="btn-retry">RETRY</button>
+      <button class="btn" id="btn-menu">MENU</button>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script type="module">
+import * as PIXI from "https://cdn.jsdelivr.net/npm/pixi.js@8.6.6/dist/pixi.min.mjs";
+
+const W = 400, H = 620;
+const COLS = 19;
+const ROWS = 27;
+const MAX_LEVEL = 200;
+
+const save = {
+  get sound() { return localStorage.getItem("runman-sound") !== "0"; },
+  set sound(v) { localStorage.setItem("runman-sound", v ? "1" : "0"); },
+  get best() { return +(localStorage.getItem("runman-best") || 0); },
+  set best(v) { localStorage.setItem("runman-best", String(v)); },
+  get unlocked() { return Math.max(1, +(localStorage.getItem("runman-unlock") || 1)); },
+  set unlocked(v) { localStorage.setItem("runman-unlock", String(Math.min(MAX_LEVEL, v))); },
+  cleared(n) { return localStorage.getItem("runman-clear-" + n) === "1"; },
+  mark(n) { localStorage.setItem("runman-clear-" + n, "1"); },
+  dailyBest() {
+    try { return JSON.parse(localStorage.getItem("runman-daily") || "null"); } catch { return null; }
+  },
+  saveDaily(rec) { localStorage.setItem("runman-daily", JSON.stringify(rec)); },
+};
+
+const $ = (id) => document.getElementById(id);
+const stageEl = $("stage");
+function fit() {
+  const vw = window.visualViewport?.width || window.innerWidth;
+  const vh = window.visualViewport?.height || window.innerHeight;
+  const padX = 12 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-l")) || 0);
+  const padY = 12;
+  const scale = Math.min((vw - padX * 2) / 400, (vh - padY * 2) / 720, 1.35);
+  stageEl.style.transform = `translate(-50%, -50%) scale(${Math.max(0.45, scale)})`;
+}
+fit();
+window.addEventListener("resize", fit);
+window.visualViewport?.addEventListener("resize", fit);
+window.visualViewport?.addEventListener("scroll", fit);
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function todayKey(d = new Date()) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function prevKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return todayKey(d);
+}
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function generateMaze(level, mode, dateStr) {
+  const rng = mulberry32(mode === "daily" ? hashSeed("runman-daily-" + dateStr) : hashSeed("runman-loops-" + mode + "-" + level));
+  const rows = ROWS, cols = COLS;
+  const grid = Array.from({ length: rows }, () => Array(cols).fill(1));
+  const hline = (y, x0, x1) => { for (let x = x0; x <= x1; x++) grid[y][x] = 0; };
+  const vline = (x, y0, y1) => { for (let y = y0; y <= y1; y++) grid[y][x] = 0; };
+  hline(1, 1, 17); hline(25, 1, 17); vline(1, 1, 25); vline(17, 1, 25);
+  for (const x of [3, 5, 7, 9, 11, 13, 15]) vline(x, 1, 25);
+  for (const y of [3, 5, 7, 9, 13, 15, 17, 19, 21, 23]) hline(y, 1, 17);
+  for (let y = 8; y <= 12; y++) for (let x = 7; x <= 11; x++) grid[y][x] = 1;
+  for (let y = 9; y <= 11; y++) for (let x = 8; x <= 10; x++) grid[y][x] = 2;
+  const door = { x: 9, y: 12 };
+  grid[door.y][door.x] = 0;
+  grid[13][9] = 0;
+  const tunnel = 15;
+  hline(tunnel, 0, 18);
+  const start = { x: 9, y: 25 };
+  grid[start.y][start.x] = 0;
+  function flood() {
+    const seen = Array.from({ length: rows }, () => Array(cols).fill(false));
+    const q = [[start.x, start.y]];
+    seen[start.y][start.x] = true;
+    let n = 0;
+    while (q.length) {
+      const [x, y] = q.pop(); n++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let nx = x + dx, ny = y + dy;
+        if (nx < 0) nx = cols - 1; if (nx >= cols) nx = 0;
+        if (ny < 0 || ny >= rows) continue;
+        if (grid[ny][nx] !== 1 && !seen[ny][nx]) { seen[ny][nx] = true; q.push([nx, ny]); }
+      }
+    }
+    return seen;
+  }
+  const candidates = [];
+  for (let y = 2; y <= 24; y++) for (let x = 2; x <= 9; x++) {
+    if (grid[y][x] !== 0) continue;
+    if (y === tunnel || y === 1 || y === 25 || x === 1) continue;
+    if (Math.abs(x - 9) <= 2 && y >= 8 && y <= 13) continue;
+    candidates.push([x, y]);
+  }
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const targetSeals = 18 + Math.floor(rng() * 10) + Math.min(8, Math.floor(level / 30));
+  let seals = 0;
+  for (const [x, y] of candidates) {
+    if (seals >= targetSeals) break;
+    const mx = cols - 1 - x;
+    if (grid[y][x] !== 0 || grid[y][mx] !== 0) continue;
+    grid[y][x] = 1; if (mx !== x) grid[y][mx] = 1;
+    const seen = flood();
+    let open = 0, reached = 0;
+    for (let yy = 0; yy < rows; yy++) for (let xx = 0; xx < cols; xx++) if (grid[yy][xx] !== 1) { open++; if (seen[yy][xx]) reached++; }
+    if (reached !== open || !seen[door.y][door.x]) {
+      grid[y][x] = 0; if (mx !== x) grid[y][mx] = 0;
+    } else seals++;
+  }
+  hline(1, 1, 17); hline(25, 1, 17); vline(1, 1, 25); vline(17, 1, 25); hline(tunnel, 0, 18);
+  grid[door.y][door.x] = 0; grid[13][9] = 0;
+  for (let y = 8; y <= 12; y++) for (let x = 7; x <= 11; x++) if (!(x === 9 && y === 12)) grid[y][x] = 1;
+  for (let y = 9; y <= 11; y++) for (let x = 8; x <= 10; x++) grid[y][x] = 2;
+  return { grid, rows, start, house: { x: 9, y: 10 }, door, tunnel, rng };
+}
+
+const DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+const OPP = { left: "right", right: "left", up: "down", down: "up" };
+
+const audio = {
+  ctx: null,
+  ensure() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === "suspended") this.ctx.resume(); },
+  tone(freq, dur, type, gain, slide) {
+    if (!save.sound) return;
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, slide), t + dur);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(this.ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  blip() { this.tone(880, 0.05, "square", 0.04); },
+  power() { this.tone(220, 0.28, "sawtooth", 0.06, 660); },
+  gulp() { this.tone(520, 0.12, "square", 0.07, 180); },
+  die() { this.tone(420, 0.45, "sawtooth", 0.08, 70); },
+  win() { this.tone(523, 0.12, "square", 0.06); setTimeout(() => this.tone(659, 0.12, "square", 0.06), 90); setTimeout(() => this.tone(784, 0.2, "square", 0.06), 180); },
+};
+
+let app, world, mazeG, actors, fx, uiLayer;
+const keys = {};
+let wantDir = null;
+let state = "menu";
+let game = null;
+
+function cellSize(rows) {
+  const pad = 8;
+  const maxW = (W - pad * 2) / COLS;
+  const maxH = (H - 16) / rows;
+  return Math.floor(Math.min(maxW, maxH));
+}
+
+function layout(rows, cs) {
+  const mw = COLS * cs, mh = rows * cs;
+  return { ox: Math.floor((W - mw) / 2), oy: Math.floor((H - mh) / 2), cs, mw, mh };
+}
+
+function drawRunner(g, x, y, r, phase, color, dir) {
+  g.circle(x, y, r).fill({ color, alpha: 0.95 });
+  g.circle(x - r * 0.28, y - r * 0.15, r * 0.13).fill(0x071018);
+  g.circle(x + r * 0.28, y - r * 0.15, r * 0.13).fill(0x071018);
+  const leg = Math.sin(phase) * r * 0.55;
+  const horiz = dir === "left" || dir === "right";
+  if (horiz) {
+    g.roundRect(x - r * 0.15, y + r * 0.55, r * 0.28, r * 0.7, 2).fill(color);
+    g.roundRect(x - r * 0.7 + leg, y + r * 0.85, r * 0.55, r * 0.22, 2).fill(0xffffff);
+    g.roundRect(x + r * 0.15 - leg, y + r * 0.85, r * 0.55, r * 0.22, 2).fill(0xfff1a8);
+  } else {
+    g.roundRect(x - r * 0.45, y + r * 0.5, r * 0.28, r * 0.75 + leg * 0.3, 2).fill(color);
+    g.roundRect(x + r * 0.18, y + r * 0.5, r * 0.28, r * 0.75 - leg * 0.3, 2).fill(color);
+  }
+  g.moveTo(x, y - r * 0.2).lineTo(x + r * 0.9, y).lineTo(x, y + r * 0.2).fill({ color: 0xffffff, alpha: 0.85 });
+}
+
+function drawPursuer(g, x, y, r, kind, phase, frightened, eyesDir) {
+  const colors = [0xff4d6d, 0xff77e1, 0x4da3ff, 0xffb703];
+  const color = frightened ? 0x6d5efc : colors[kind];
+  g.roundRect(x - r, y - r * 0.85, r * 2, r * 1.7, r * 0.7).fill(color);
+  const wob = Math.sin(phase) * 2;
+  g.circle(x - r * 0.55, y + r * 0.7, r * 0.28).fill(color);
+  g.circle(x, y + r * 0.78 + wob * 0.2, r * 0.28).fill(color);
+  g.circle(x + r * 0.55, y + r * 0.7, r * 0.28).fill(color);
+  g.moveTo(x - r * 0.2, y - r).lineTo(x, y - r * 1.45).lineTo(x + r * 0.2, y - r).stroke({ width: 1.5, color });
+  g.circle(x, y - r * 1.5, r * 0.16).fill(frightened ? 0xffffff : 0xfff3bf);
+  if (frightened) {
+    g.moveTo(x - r * 0.35, y - r * 0.15).lineTo(x - r * 0.05, y + r * 0.1).stroke({ width: 2, color: 0xffffff });
+    g.moveTo(x + r * 0.35, y - r * 0.15).lineTo(x + r * 0.05, y + r * 0.1).stroke({ width: 2, color: 0xffffff });
+  } else {
+    const ex = eyesDir[0] * r * 0.12, ey = eyesDir[1] * r * 0.12;
+    g.circle(x - r * 0.32, y - r * 0.05, r * 0.22).fill(0xffffff);
+    g.circle(x + r * 0.32, y - r * 0.05, r * 0.22).fill(0xffffff);
+    g.circle(x - r * 0.32 + ex, y - r * 0.05 + ey, r * 0.1).fill(0x12081c);
+    g.circle(x + r * 0.32 + ex, y - r * 0.05 + ey, r * 0.1).fill(0x12081c);
+  }
+}
+
+function openAt(grid, x, y, rows) {
+  if (y < 0 || y >= rows) return false;
+  let nx = x;
+  if (nx < 0) nx = COLS - 1;
+  if (nx >= COLS) nx = 0;
+  return grid[y][nx] !== 1;
+}
+function wrapX(x) { if (x < 0) return COLS - 1; if (x >= COLS) return 0; return x; }
+
+function neighbors(grid, x, y, rows) {
+  const out = [];
+  for (const [name, d] of Object.entries(DIRS)) {
+    const nx = wrapX(x + d[0]), ny = y + d[1];
+    if (openAt(grid, nx, ny, rows)) out.push(name);
+  }
+  return out;
+}
+
+function bfsDir(grid, rows, from, to, avoidReverse) {
+  if (from.x === to.x && from.y === to.y) return null;
+  const key = (x, y) => y * COLS + x;
+  const q = [[from.x, from.y]];
+  const prev = new Map();
+  prev.set(key(from.x, from.y), null);
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x === to.x && y === to.y) break;
+    for (const name of neighbors(grid, x, y, rows)) {
+      const d = DIRS[name];
+      const nx = wrapX(x + d[0]), ny = y + d[1];
+      const k = key(nx, ny);
+      if (prev.has(k)) continue;
+      prev.set(k, { x, y, name });
+      q.push([nx, ny]);
+    }
+  }
+  const tk = key(to.x, to.y);
+  if (!prev.has(tk)) return null;
+  let cur = prev.get(tk);
+  let first = null;
+  const startK = key(from.x, from.y);
+  while (cur) {
+    first = cur.name;
+    const pk = key(cur.x, cur.y);
+    if (pk === startK) break;
+    cur = prev.get(pk);
+  }
+  if (first && avoidReverse && first === avoidReverse) {
+    const opts = neighbors(grid, from.x, from.y, rows).filter((n) => n !== avoidReverse);
+    if (opts.length) return opts[0];
+  }
+  return first;
+}
+
+function scatterTarget(kind, cols, rows, tick) {
+  const corners = [
+    { x: cols - 2, y: 1 },
+    { x: 1, y: 1 },
+    { x: cols - 2, y: rows - 2 },
+    { x: 1, y: rows - 2 },
+  ];
+  return corners[kind];
+}
+
+function chooseEnemyDir(e, g) {
+  const grid = g.maze.grid, rows = g.maze.rows;
+  const rev = OPP[e.dir];
+  if (e.mode === "house") {
+    e.dir = e.y <= g.maze.house.y - 0 ? "down" : e.y >= g.maze.house.y ? "up" : e.dir;
+    if (g.tick > e.release) {
+      const d = bfsDir(grid, rows, e, g.maze.door, null);
+      return d || "down";
+    }
+    return e.dir;
+  }
+  if (e.mode === "eyes") {
+    return bfsDir(grid, rows, e, g.maze.house, rev) || e.dir;
+  }
+  if (e.mode === "frightened") {
+    const opts = neighbors(grid, e.x, e.y, rows).filter((n) => n !== rev);
+    const pool = opts.length ? opts : neighbors(grid, e.x, e.y, rows);
+    return pool[Math.floor(Math.random() * pool.length)] || e.dir;
+  }
+  let target = g.player;
+  if (e.kind === 0) target = { x: g.player.x, y: g.player.y };
+  else if (e.kind === 1) {
+    if ((g.tick >> 6) & 1) target = scatterTarget(1, COLS, rows);
+    else target = { x: g.player.x, y: g.player.y };
+  } else if (e.kind === 2) {
+    const d = DIRS[g.player.dir] || [0, 0];
+    target = { x: wrapX(g.player.x + d[0] * 3), y: Math.max(1, Math.min(rows - 2, g.player.y + d[1] * 3)) };
+  } else {
+    const dist = Math.abs(e.x - g.player.x) + Math.abs(e.y - g.player.y);
+    target = dist > 6 ? { x: g.player.x, y: g.player.y } : scatterTarget(3, COLS, rows);
+  }
+  if ((g.tick % 280) < 70 && e.mode === "chase") target = scatterTarget(e.kind, COLS, rows);
+  return bfsDir(grid, rows, e, target, rev) || e.dir;
+}
+
+function burst(x, y, color, n, speed) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = speed * (0.4 + Math.random());
+    fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 18 + Math.random() * 16, color, r: 1.5 + Math.random() * 2.2 });
+  }
+}
+
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.style.transition = "none";
+  el.style.opacity = "1";
+  el.style.transform = "translate(-50%, -30%)";
+  requestAnimationFrame(() => {
+    el.style.transition = "all .7s ease";
+    el.style.transform = "translate(-50%, -70%)";
+    el.style.opacity = "0";
+  });
+}
+
+function setOverlay(id) {
+  for (const n of ["menu", "levels", "help", "over"]) $(n).classList.toggle("show", n === id);
+}
+
+function streakMult(n) { return Math.min(5, 1 + Math.floor(Math.max(0, n) / 3)); }
+function refreshMeta() {
+  $("btn-sound").textContent = "SOUND: " + (save.sound ? "ON" : "OFF");
+  $("best").textContent = "BEST " + save.best;
+  $("score").textContent = game ? game.score : 0;
+  $("lv").textContent = game ? (game.mode === "daily" ? "D" : game.level) : 1;
+  $("lives").textContent = game ? "●".repeat(Math.max(0, game.lives)) : "●●●";
+  const streak = game ? game.streak : 0;
+  $("streak").textContent = streak > 0 ? "x" + streakMult(streak) + " · " + streak : "";
+  const rec = save.dailyBest();
+  const note = $("daily-note");
+  if (!rec) note.textContent = "";
+  else if (rec.date === todayKey() && rec.beat) note.textContent = "DAILY MEDAL · " + rec.score + " · " + fmtTime(rec.ms);
+  else if (rec.date === todayKey()) note.textContent = "TODAY " + rec.score + " · " + fmtTime(rec.ms);
+  else note.textContent = "LAST DAILY " + rec.score;
+}
+
+function buildLevelGrid() {
+  const grid = $("level-grid");
+  grid.innerHTML = "";
+  const unlocked = save.unlocked;
+  for (let i = 1; i <= MAX_LEVEL; i++) {
+    const b = document.createElement("button");
+    b.textContent = i;
+    if (i > unlocked) b.classList.add("locked");
+    if (save.cleared(i)) b.classList.add("cleared");
+    b.onclick = () => { if (i <= save.unlocked) startGame("campaign", i); };
+    grid.appendChild(b);
+  }
+}
+
+function startGame(mode, level, carry) {
+  audio.ensure();
+  const dateStr = todayKey();
+  const lv = mode === "daily" ? 40 + (new Date().getDate() % 12) : level;
+  const maze = generateMaze(lv, mode === "campaign" ? "campaign" : mode, dateStr);
+  const cs = cellSize(maze.rows);
+  const L = layout(maze.rows, cs);
+  const keptScore = carry ? carry.score : 0;
+  const keptLives = carry ? carry.lives : 3;
+  game = {
+    mode,
+    level: mode === "daily" ? 1 : level,
+    maze, L,
+    score: keptScore,
+    lives: keptLives,
+    pelletsLeft: 0, tick: 0, power: 0, speed: 0, magnet: 0, freeze: 0,
+    combo: 0, phase: "ready", phaseT: 0, player: null, enemies: [], dots: [],
+    streak: carry ? carry.streak : 0,
+    clean: true,
+    startedAt: performance.now(),
+  };
+  const dots = [];
+  let pellets = 0;
+  const rng = maze.rng;
+  const powerSpots = [];
+  for (let y = 0; y < maze.rows; y++) for (let x = 0; x < COLS; x++) {
+    if (maze.grid[y][x] !== 0) continue;
+    if (x === maze.start.x && y === maze.start.y) continue;
+    if (Math.abs(x - maze.house.x) <= 2 && Math.abs(y - maze.house.y) <= 2) continue;
+    pellets++;
+    let kind = "dot";
+    if ((x === 1 && y === 1) || (x === COLS - 2 && y === 1) || (x === 1 && y === maze.rows - 2) || (x === COLS - 2 && y === maze.rows - 2)) kind = "volt";
+    else if (rng() < 0.035 + Math.min(0.03, level / 800)) {
+      kind = ["bolt", "magnet", "frost"][Math.floor(rng() * 3)];
+    }
+    dots.push({ x, y, kind, alive: true });
+    if (kind !== "dot") powerSpots.push(kind);
+  }
+  game.pelletsLeft = dots.filter((d) => d.alive).length;
+  game.dots = dots;
+  game.player = { x: maze.start.x, y: maze.start.y, dir: "left", next: null, prog: 0, mouth: 0 };
+  const spots = [
+    { x: maze.house.x - 1, y: maze.house.y },
+    { x: maze.house.x + 1, y: maze.house.y },
+    { x: maze.house.x, y: maze.house.y - 1 },
+    { x: maze.house.x, y: maze.house.y + 1 },
+  ];
+  const count = level >= 12 ? 4 : level >= 4 ? 3 : 2;
+  game.enemies = [];
+  for (let i = 0; i < count; i++) {
+    game.enemies.push({
+      kind: i, x: spots[i].x, y: spots[i].y, dir: "up", prog: 0,
+      mode: "house", release: 30 + i * 70, eyes: [0, -1],
+    });
+  }
+  state = "play";
+  setOverlay(null);
+  refreshMeta();
+  toast(mode === "daily" ? "DAILY " + dateStr : mode === "endless" ? "ENDLESS " + game.level : "FLOOR " + game.level);
+}
+
+function recordDaily() {
+  const ms = Math.round(performance.now() - game.startedAt);
+  const prev = save.dailyBest();
+  const today = todayKey();
+  const better = (aScore, aMs, bScore, bMs) => aScore > bScore || (aScore === bScore && aMs < bMs);
+  let score = game.score, time = ms, beat = false;
+  if (prev && prev.date === today) {
+    beat = !!prev.beat;
+    if (!better(game.score, ms, prev.score, prev.ms)) { score = prev.score; time = prev.ms; }
+  } else if (prev && prev.date === prevKey()) {
+    beat = better(game.score, ms, prev.score, prev.ms);
+  }
+  save.saveDaily({ date: today, score, ms: time, beat });
+  if (beat) toast("DAILY MEDAL");
+}
+
+function addScore(n) {
+  game.score += n;
+  if (game.score > save.best) save.best = game.score;
+  refreshMeta();
+}
+
+function killPlayer() {
+  if (game.phase !== "play") return;
+  audio.die();
+  game.lives--;
+  game.clean = false;
+  if (game.streak > 0) toast("STREAK LOST");
+  game.streak = 0;
+  game.phase = "death";
+  game.phaseT = 0;
+  burst(px(game.player), py(game.player), 0x3ef0ff, 28, 3.2);
+  refreshMeta();
+}
+
+function px(ent) {
+  const { ox, cs } = game.L;
+  const d = DIRS[ent.dir] || [0, 0];
+  return ox + (ent.x + d[0] * ent.prog + 0.5) * cs;
+}
+function py(ent) {
+  const { oy, cs } = game.L;
+  const d = DIRS[ent.dir] || [0, 0];
+  return oy + (ent.y + d[1] * ent.prog + 0.5) * cs;
+}
+
+function stepActor(ent, speed, grid, rows, dirFn) {
+  const ahead = DIRS[ent.dir];
+  const nx = wrapX(ent.x + ahead[0]);
+  const ny = ent.y + ahead[1];
+  if (!openAt(grid, nx, ny, rows)) {
+    ent.prog = 0;
+    const turn = dirFn(ent);
+    if (turn && turn !== ent.dir && openAt(grid, wrapX(ent.x + DIRS[turn][0]), ent.y + DIRS[turn][1], rows)) ent.dir = turn;
+    return;
+  }
+  ent.prog += speed;
+  if (ent.prog < 1) return;
+  const over = ent.prog - 1;
+  ent.prog = 0;
+  ent.x = nx;
+  ent.y = ny;
+  const next = dirFn(ent);
+  if (next && openAt(grid, wrapX(ent.x + DIRS[next][0]), ent.y + DIRS[next][1], rows)) ent.dir = next;
+  if (openAt(grid, wrapX(ent.x + DIRS[ent.dir][0]), ent.y + DIRS[ent.dir][1], rows)) ent.prog = Math.min(0.95, over);
+}
+
+function tickGame(delta) {
+  if (!game || state !== "play") return;
+  const dt = Math.min(2.2, delta / 16.67);
+  game.tick += dt;
+  if (game.phase === "ready") {
+    game.phaseT += dt;
+    if (game.phaseT > 28) game.phase = "play";
+    return;
+  }
+  if (game.phase === "death") {
+    game.phaseT += dt;
+    if (game.phaseT > 46) {
+      if (game.lives <= 0) {
+        state = "over";
+        $("over-tag").textContent = "RUN OVER";
+        $("over-title").textContent = "CAUGHT";
+        $("over-sub").textContent = "SCORE " + game.score;
+        setOverlay("over");
+      } else {
+        game.player.x = game.maze.start.x;
+        game.player.y = game.maze.start.y;
+        game.player.dir = "left";
+        game.player.prog = 0;
+        game.player.next = null;
+        game.power = game.speed = game.magnet = game.freeze = 0;
+        game.phase = "play";
+      }
+    }
+    return;
+  }
+  if (game.phase === "clear") {
+    game.phaseT += dt;
+    if (game.phaseT === dt || Math.floor(game.phaseT) % 4 === 0) {
+      burst(W * Math.random(), 40 + Math.random() * 80, [0x3ef0ff, 0xff4fd8, 0xffc857, 0xffffff][Math.floor(Math.random() * 4)], 2, 1.4);
+    }
+    if (game.phaseT > 70) {
+      if (game.clean) game.streak++;
+      const bonus = (500 + game.level * 20) * streakMult(game.streak);
+      addScore(bonus);
+      if (game.mode === "daily") recordDaily();
+      if (game.mode === "campaign") {
+        save.mark(game.level);
+        save.unlocked = Math.max(save.unlocked, game.level + 1);
+        if (game.level >= MAX_LEVEL) {
+          state = "over";
+          $("over-tag").textContent = "ALL FLOORS CLEAR";
+          $("over-title").textContent = "LEGEND";
+          $("over-sub").textContent = "SCORE " + game.score;
+          setOverlay("over");
+          return;
+        }
+        startGame("campaign", game.level + 1, { score: game.score, lives: game.lives, streak: game.streak });
+      } else if (game.mode === "daily") {
+        state = "over";
+        $("over-tag").textContent = "DAILY CLEARED";
+        $("over-title").textContent = "NICE RUN";
+        $("over-sub").textContent = "SCORE " + game.score;
+        setOverlay("over");
+      } else {
+        startGame("endless", game.level + 1, { score: game.score, lives: game.lives, streak: game.streak });
+      }
+    }
+    return;
+  }
+
+  const grid = game.maze.grid, rows = game.maze.rows;
+  const diff = Math.min(18, Math.floor((game.level - 1) / 8));
+  const pSpeed = (0.085 + diff * 0.004) * (game.speed > 0 ? 1.55 : 1) * dt;
+  const eSpeed = (0.062 + diff * 0.0045) * (game.freeze > 0 ? 0 : 1) * dt;
+
+  if (wantDir) game.player.next = wantDir;
+  const queued = game.player.next;
+  stepActor(game.player, pSpeed, grid, rows, (ent) => {
+    if (queued && openAt(grid, wrapX(ent.x + DIRS[queued][0]), ent.y + DIRS[queued][1], rows)) {
+      ent.next = null;
+      return queued;
+    }
+    return ent.dir;
+  });
+  game.player.mouth += dt * (game.speed > 0 ? 0.7 : 0.45);
+
+  if (game.power > 0) game.power -= dt;
+  if (game.speed > 0) game.speed -= dt;
+  if (game.magnet > 0) game.magnet -= dt;
+  if (game.freeze > 0) game.freeze -= dt;
+  if (game.power <= 0) game.combo = 0;
+
+  for (const e of game.enemies) {
+    if (e.mode === "house" && game.tick > e.release && e.x === game.maze.door.x && e.y === game.maze.door.y) e.mode = "chase";
+    if (e.mode === "eyes" && e.x === game.maze.house.x && e.y === game.maze.house.y) {
+      e.mode = "chase";
+    }
+    const sp = e.mode === "eyes" ? eSpeed * 1.7 : e.mode === "frightened" ? eSpeed * 0.55 : eSpeed * (0.92 + e.kind * 0.04);
+    if (e.mode !== "house" || game.tick > e.release - 10) {
+      stepActor(e, e.mode === "house" ? eSpeed * 0.45 : sp, grid, rows, (ent) => chooseEnemyDir(ent, game));
+    }
+    const d = DIRS[e.dir];
+    e.eyes = d || e.eyes;
+    if (e.mode === "frightened" && game.power <= 0) e.mode = "chase";
+  }
+
+  const pr = game.L.cs * 0.42;
+  const ppx = px(game.player), ppy = py(game.player);
+  for (const dot of game.dots) {
+    if (!dot.alive) continue;
+    const dx = game.L.ox + (dot.x + 0.5) * game.L.cs;
+    const dy = game.L.oy + (dot.y + 0.5) * game.L.cs;
+    const dist = Math.hypot(dx - ppx, dy - ppy);
+    if (game.magnet > 0 && dist < game.L.cs * 3.2 && dist > 2) {
+      dot.x += (game.player.x - dot.x) * 0.08 * dt;
+      dot.y += (game.player.y - dot.y) * 0.08 * dt;
+    }
+    const ddx = game.L.ox + (dot.x + 0.5) * game.L.cs;
+    const ddy = game.L.oy + (dot.y + 0.5) * game.L.cs;
+    if (Math.hypot(ddx - ppx, ddy - ppy) < pr) {
+      dot.alive = false;
+      game.pelletsLeft--;
+      if (dot.kind === "dot") { addScore(10); audio.blip(); burst(ddx, ddy, 0xfff6c2, 4, 1.2); }
+      else if (dot.kind === "volt") {
+        addScore(50); audio.power(); game.power = 280; game.combo = 0;
+        for (const e of game.enemies) if (e.mode !== "eyes" && e.mode !== "house") e.mode = "frightened";
+        burst(ddx, ddy, 0xb388ff, 16, 2.4); toast("VOLT");
+      } else if (dot.kind === "bolt") { addScore(30); audio.power(); game.speed = 220; burst(ddx, ddy, 0x7dffb3, 12, 2.6); toast("BOLT"); }
+      else if (dot.kind === "magnet") { addScore(30); audio.power(); game.magnet = 240; burst(ddx, ddy, 0xff4fd8, 12, 2); toast("MAGNET"); }
+      else if (dot.kind === "frost") {
+        addScore(30); audio.power(); game.freeze = 160; burst(ddx, ddy, 0x9be7ff, 14, 1.6); toast("FROST");
+      }
+    }
+  }
+
+  for (const e of game.enemies) {
+    if (e.mode === "eyes" || e.mode === "house") continue;
+    if (Math.hypot(px(e) - ppx, py(e) - ppy) < game.L.cs * 0.72) {
+      if (e.mode === "frightened") {
+        game.combo++;
+        const pts = 200 * game.combo;
+        addScore(pts);
+        audio.gulp();
+        burst(px(e), py(e), 0xffffff, 18, 2.8);
+        toast("+" + pts);
+        e.mode = "eyes";
+      } else if (game.phase === "play") killPlayer();
+    }
+  }
+
+  if (game.pelletsLeft <= 0 && game.phase === "play") {
+    game.phase = "clear";
+    game.phaseT = 0;
+    audio.win();
+    toast(game.clean ? "CLEAR · STREAK " + (game.streak + 1) : "FLOOR CLEAR");
+    burst(W / 2, H / 2, 0xffc857, 40, 4);
+  }
+
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const p = fx[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.04 * dt; p.life -= dt;
+    if (p.life <= 0) fx.splice(i, 1);
+  }
+}
+
+function render() {
+  mazeG.clear();
+  actors.clear();
+  actors.removeChildren();
+  if (!game) {
+    mazeG.roundRect(30, 180, 340, 200, 16).fill({ color: 0x120e24, alpha: 0.4 });
+    return;
+  }
+  const { grid, rows, tunnel } = game.maze;
+  const { ox, oy, cs } = game.L;
+  const flash = game.phase === "clear";
+  const wall = flash ? 0xfff1a8 : 0x2f3cff;
+  const edge = flash ? 0xffe08a : 0xd7e2ff;
+  mazeG.rect(0, 0, W, H).fill(0x07060f);
+  mazeG.roundRect(ox - 3, oy - 3, COLS * cs + 6, rows * cs + 6, 6).fill(0x10142e);
+  const blocked = (x, y) => {
+    if (y < 0 || y >= rows || x < 0 || x >= COLS) return true;
+    return grid[y][x] === 1;
+  };
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (!blocked(x, y)) continue;
+      const X = ox + x * cs, Y = oy + y * cs;
+      mazeG.rect(X, Y, cs + 0.6, cs + 0.6).fill(wall);
+      if (!blocked(x, y - 1)) mazeG.rect(X, Y, cs, 2.4).fill(edge);
+      if (!blocked(x, y + 1)) mazeG.rect(X, Y + cs - 2.4, cs, 2.4).fill(edge);
+      if (!blocked(x - 1, y)) mazeG.rect(X, Y, 2.4, cs).fill(edge);
+      if (!blocked(x + 1, y)) mazeG.rect(X + cs - 2.4, Y, 2.4, cs).fill(edge);
+    }
+  }
+  mazeG.rect(ox - 3, oy + tunnel * cs, 8, cs).fill(0x07060f);
+  mazeG.rect(ox + COLS * cs - 5, oy + tunnel * cs, 8, cs).fill(0x07060f);
+  if (game.phase === "ready") {
+    const label = game.mode === "daily" ? "DAILY" : "FLOOR " + game.level;
+    const banner = new PIXI.Text({ text: label + "  ·  GO", style: { fill: 0xffc857, fontSize: 28, fontWeight: "800", letterSpacing: 2 } });
+    banner.anchor.set(0.5);
+    banner.x = W / 2; banner.y = H / 2;
+    actors.addChild(banner);
+  }
+  if (game.phase !== "death") {
+    const trail = DIRS[game.player.dir] || [0, 0];
+    actors.circle(px(game.player) - trail[0] * cs * 0.35, py(game.player) - trail[1] * cs * 0.35, cs * 0.22).fill({ color: 0x3ef0ff, alpha: 0.25 });
+    drawRunner(actors, px(game.player), py(game.player), cs * 0.42, game.player.mouth * 6, 0x3ef0ff, game.player.dir);
+  } else {
+    const s = Math.max(0.1, 1 - game.phaseT / 40);
+    actors.circle(px(game.player), py(game.player), cs * 0.42 * s).stroke({ width: 2, color: 0x3ef0ff, alpha: s });
+  }
+  for (const e of game.enemies) {
+    if (e.mode === "eyes") {
+      actors.circle(px(e), py(e), cs * 0.12).fill(0xffffff);
+      actors.circle(px(e) + 6, py(e), cs * 0.12).fill(0xffffff);
+      continue;
+    }
+    const fright = e.mode === "frightened" && (game.power > 50 || Math.floor(game.tick / 4) % 2 === 0);
+    drawPursuer(actors, px(e), py(e), cs * 0.4, e.kind, game.tick * 0.3 + e.kind, fright, e.eyes);
+  }
+  for (const dot of game.dots) {
+    if (!dot.alive) continue;
+    const x = game.L.ox + (dot.x + 0.5) * cs;
+    const y = game.L.oy + (dot.y + 0.5) * cs;
+    if (dot.kind === "dot") actors.circle(x, y, Math.max(1.3, cs * 0.07)).fill({ color: 0xfff3c4, alpha: 0.8 });
+    else {
+      const col = dot.kind === "volt" ? 0xb388ff : dot.kind === "bolt" ? 0x7dffb3 : dot.kind === "magnet" ? 0xff4fd8 : 0x9be7ff;
+      const pulse = 1 + Math.sin(game.tick * 0.2) * 0.12;
+      actors.circle(x, y, cs * 0.22 * pulse).fill({ color: col, alpha: 0.9 });
+      actors.circle(x, y, cs * 0.1).fill(0xffffff);
+    }
+  }
+  for (const p of fx) {
+    actors.circle(p.x, p.y, p.r).fill({ color: p.color, alpha: Math.max(0, p.life / 30) });
+  }
+  if (game.phase === "clear") {
+    const banner = new PIXI.Text({ text: "FLOOR CLEAR", style: { fill: 0xffc857, fontSize: 32, fontWeight: "800", letterSpacing: 3 } });
+    banner.anchor.set(0.5);
+    banner.x = W / 2;
+    banner.y = H / 2 - Math.min(24, game.phaseT * 0.4);
+    banner.alpha = Math.max(0.2, 1 - game.phaseT / 80);
+    actors.addChild(banner);
+  }
+}
+
+async function boot() {
+  app = new PIXI.Application();
+  await app.init({
+    canvas: $("view"),
+    width: W,
+    height: H,
+    background: 0x07060f,
+    antialias: true,
+    resolution: Math.min(2, window.devicePixelRatio || 1),
+    autoDensity: true,
+  });
+  world = new PIXI.Container();
+  mazeG = new PIXI.Graphics();
+  actors = new PIXI.Graphics();
+  fx = [];
+  app.stage.addChild(mazeG, actors);
+  app.ticker.add((ticker) => {
+    tickGame(ticker.deltaMS);
+    render();
+  });
+  const hero = $("hero").getContext("2d");
+  let t = 0;
+  setInterval(() => {
+    t += 0.15;
+    hero.clearRect(0, 0, 400, 92);
+    const x = 70 + (t * 28) % 280;
+    hero.fillStyle = "#3ef0ff";
+    hero.beginPath(); hero.arc(x, 40, 16, 0, Math.PI * 2); hero.fill();
+    hero.fillRect(x - 4, 52, 6, 14 + Math.sin(t * 4) * 4);
+    hero.fillRect(x + 4, 52, 6, 14 - Math.sin(t * 4) * 4);
+    hero.fillStyle = "#ff4d6d";
+    hero.fillRect(x - 70, 30, 22, 18);
+    hero.fillStyle = "#4da3ff";
+    hero.fillRect(x - 110, 34, 22, 16);
+  }, 40);
+  refreshMeta();
+  buildLevelGrid();
+}
+
+$("btn-start").onclick = () => startGame("campaign", Math.min(save.unlocked, MAX_LEVEL));
+$("btn-levels").onclick = () => { buildLevelGrid(); setOverlay("levels"); };
+$("btn-back-levels").onclick = () => setOverlay("menu");
+$("btn-help").onclick = () => setOverlay("help");
+$("btn-back-help").onclick = () => setOverlay("menu");
+$("btn-daily").onclick = () => startGame("daily", 1);
+$("btn-endless").onclick = () => startGame("endless", 1);
+$("btn-sound").onclick = () => { save.sound = !save.sound; if (save.sound) { audio.ensure(); audio.blip(); } refreshMeta(); };
+$("btn-exit").onclick = () => {
+  $("over-tag").textContent = "SEE YOU";
+  $("over-title").textContent = "RUNMAN";
+  $("over-sub").textContent = "Made with shapes, seeds, and stubborn legs.";
+  $("btn-retry").textContent = "BACK";
+  setOverlay("over");
+  $("btn-retry").onclick = () => { $("btn-retry").textContent = "RETRY"; $("btn-retry").onclick = retry; setOverlay("menu"); };
+};
+function retry() {
+  if (!game) { setOverlay("menu"); return; }
+  const mode = game.mode;
+  const level = mode === "campaign" ? game.level : 1;
+  startGame(mode, level);
+}
+$("btn-retry").onclick = retry;
+$("btn-menu").onclick = () => { state = "menu"; setOverlay("menu"); refreshMeta(); buildLevelGrid(); };
+
+const keyMap = {
+  ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  a: "left", d: "right", w: "up", s: "down", A: "left", D: "right", W: "up", S: "down",
+};
+addEventListener("keydown", (e) => {
+  if (!keyMap[e.key]) return;
+  held[keyMap[e.key]] = true;
+  wantDir = keyMap[e.key];
+  e.preventDefault();
+});
+addEventListener("keyup", (e) => {
+  if (!keyMap[e.key]) return;
+  held[keyMap[e.key]] = false;
+  const order = ["up", "down", "left", "right"];
+  wantDir = order.find((d) => held[d]) || null;
+});
+
+const held = { left: false, right: false, up: false, down: false };
+function syncWant() {
+  wantDir = held.up ? "up" : held.down ? "down" : held.left ? "left" : held.right ? "right" : wantDir;
+}
+function bindPad(btn) {
+  const dir = btn.dataset.dir;
+  const down = (e) => { e.preventDefault(); held[dir] = true; wantDir = dir; btn.classList.add("on"); };
+  const up = (e) => {
+    e.preventDefault();
+    held[dir] = false;
+    btn.classList.remove("on");
+    wantDir = held.up ? "up" : held.down ? "down" : held.left ? "left" : held.right ? "right" : null;
+  };
+  btn.addEventListener("pointerdown", down);
+  btn.addEventListener("pointerup", up);
+  btn.addEventListener("pointercancel", up);
+}
+document.querySelectorAll("#pad button").forEach(bindPad);
+const swipe = { x: 0, y: 0, on: false };
+$("view").addEventListener("pointerdown", (e) => {
+  swipe.x = e.clientX; swipe.y = e.clientY; swipe.on = true;
+  $("pad").classList.add("show");
+});
+$("view").addEventListener("pointerup", (e) => {
+  if (!swipe.on) return;
+  swipe.on = false;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  if (Math.hypot(dx, dy) < 18) return;
+  wantDir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+});
+
+boot().catch((err) => {
+  console.error(err);
+  $("best").textContent = "Could not start renderer. Check the network for PixiJS.";
+});
+</script>
+</body>
+</html>
