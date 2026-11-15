@@ -554,6 +554,7 @@ function startGame(mode, level, carry) {
     clean: true,
     startedAt: performance.now(),
   };
+  window.PIM&&window.PIM.levelStart(game.level, { mode: game.mode });
   const dots = [];
   let pellets = 0;
   const rng = maze.rng;
@@ -674,6 +675,8 @@ function tickGame(delta) {
     game.phaseT += dt;
     if (game.phaseT > 46) {
       if (game.lives <= 0) {
+        window.PIM&&window.PIM.levelEnd(game.level, false, { score: game.score, mode: game.mode });
+        window.PIM&&window.PIM.end({ score: game.score, level: game.level, mode: game.mode });
         state = "over";
         $("over-tag").textContent = "RUN OVER";
         $("over-title").textContent = "CAUGHT";
@@ -807,6 +810,7 @@ function tickGame(delta) {
   }
 
   if (game.pelletsLeft <= 0 && game.phase === "play") {
+    window.PIM&&window.PIM.levelEnd(game.level, true, { score: game.score, mode: game.mode, clean: game.clean });
     game.phase = "clear";
     game.phaseT = 0;
     audio.win();
